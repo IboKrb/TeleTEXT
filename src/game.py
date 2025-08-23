@@ -55,6 +55,7 @@ class Spiel:
         for raum in self.aktueller_raum.verbindungen:
             if raum.name.lower() == neuer_raum:
                 self.aktueller_raum = raum
+                self.raum_betreten()
                 return
         print("Du kannst nicht dorthin gehen.")
 
@@ -66,36 +67,32 @@ class Spiel:
                 return
         print("Ungültige Aufgaben-ID.")
 
+    def raum_betreten(self, ):
+        print(f"\nDu bist jetzt im {self.aktueller_raum.name}.")
+        print("Du kannst folgende Aktionen ausführen:")
+        print(" - deinen Raum wechseln:", [raum.name for raum in self.aktueller_raum.verbindungen])
+        if self.aktueller_raum.aufgaben != "":
+            print(" - aufgabe anzeigen: anzeigen")
+        eingabe = input("Was möchtest du tun? ").strip().lower()
+        if eingabe == "post" or eingabe == "technik" or eingabe == "drucker" or eingabe == "flur":
+            self.raum_wechseln(eingabe)
+        elif eingabe == "anzeigen":
+            if self.aktueller_raum.aufgaben:
+                print("\nAufgaben in diesem Raum:")
+            for aufgabe in self.aktueller_raum.aufgaben:
+                print(aufgabe)
+                if aufgabe != "":
+                    aufgabe_id = int(input("Welche Aufgabe möchtest du ausführen (ID eingeben)? "))
+                    self.aufgabe_ausfuehren(aufgabe_id)
+        else:
+            print("Keine Aufgaben mehr hier.")
+
+
     def spiel_starten(self):
         print("Willkommen zum Spiel!")
         while True:
-            print(f"\nDu bist jetzt im {self.aktueller_raum.name}.")
-            print("Du kannst folgende Aktionen ausführen:")
-            print(" - In Raum wechseln:", [raum.name for raum in self.aktueller_raum.verbindungen])
-            print(" - Aufgabe ausführen:", [aufgabe.name for aufgabe in self.aktueller_raum.aufgaben])
-            eingabe = input("Was möchtest du tun? ").strip().lower()
-            if eingabe == "post" or eingabe == "technik" or eingabe == "drucker" or eingabe == "flur":
-                self.raum_wechseln(eingabe)
-            elif eingabe == "aufgabe ausführen":
-                try:
-                    aufgabe_id = int(input("Welche Aufgabe möchtest du ausführen (ID eingeben)? "))
-                    self.aufgabe_ausfuehren(aufgabe_id)
-                except ValueError:
-                    print("Bitte eine gültige Zahl eingeben.")
+            self.raum_betreten()
             
-            if self.aktueller_raum.aufgaben:
-                print("\nAufgaben in diesem Raum:")
-                for aufgabe in self.aktueller_raum.aufgaben:
-                    print(aufgabe)
-
-                try:
-                    aufgabe_id = int(input("Welche Aufgabe möchtest du ausführen (ID eingeben)? "))
-                    self.aufgabe_ausfuehren(aufgabe_id)
-                except ValueError:
-                    print("Bitte eine gültige Zahl eingeben.")
-            else:
-                print("Keine Aufgaben mehr hier.")
-
 if __name__ == "__main__":
     spiel = Spiel()
     spiel.spiel_starten()
