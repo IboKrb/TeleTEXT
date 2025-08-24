@@ -1,12 +1,10 @@
 # pygame_game.py
 import os
-import sys
 import pygame
 from typing import List, Tuple, Optional
 
-# Import eure bestehenden Datenklassen / Spiel-Logik
-# (aus den hochgeladenen Dateien: aufgabe.py, person.py, raum.py, spiel.py)
-from spiel import Spiel
+# Import Setup (nur Datenaufbau), plus eure Modelle
+from setup import Setup
 from person import Person
 from aufgabe import Aufgabe
 from raum import Raum
@@ -100,12 +98,16 @@ class TextLog:
 # Pygame-Frontend, das die bestehende Spiel-Logik nutzt
 ################################################################################
 
-
+# Räume-Hintergründe (z. B. ../assets/Rooms/flur.png)
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "../assets/Rooms")
 
+################################################################################
+# Personen-Portraits laden
+################################################################################
+
+# Wir erlauben ../assets als Root
 ASSETS_ROOTS = [
-    os.path.join(os.path.dirname(__file__), "../assets")
-    
+    os.path.join(os.path.dirname(__file__), "../assets"),
 ]
 
 def load_person_portrait(person_name: str, target_size: Tuple[int, int]) -> Optional[pygame.Surface]:
@@ -117,12 +119,13 @@ def load_person_portrait(person_name: str, target_size: Tuple[int, int]) -> Opti
     """
     folder_name = person_name
     basefile = person_name[:1].lower() + person_name[1:] + "Neutral"
+
     candidates = []
     for root in ASSETS_ROOTS:
         base_dir = os.path.join(root, "People", folder_name)
         for ext in (".png", ".jpg", ".jpeg", ".webp"):
             candidates.append(os.path.join(base_dir, basefile + ext))
-    
+
     for path in candidates:
         if os.path.exists(path):
             try:
@@ -136,13 +139,15 @@ def load_person_portrait(person_name: str, target_size: Tuple[int, int]) -> Opti
 def scale_to_fit(surface: pygame.Surface, target: Tuple[int, int]) -> pygame.Surface:
     tw, th = target
     sw, sh = surface.get_width(), surface.get_height()
+    if sw == 0 or sh == 0:
+        return pygame.transform.smoothscale(surface, target)
     scale = min(tw / sw, th / sh)
     nw, nh = max(1, int(sw * scale)), max(1, int(sh * scale))
     return pygame.transform.smoothscale(surface, (nw, nh))
 
 def load_room_background(raum: Raum, target_size: Tuple[int, int]) -> pygame.Surface:
     """
-    Versucht, ein Hintergrundbild aus ./assets/<raumname>.png zu laden.
+    Versucht, ein Hintergrundbild aus ../assets/Rooms/<raumname>.png zu laden.
     Fallback: einfärbte Fläche mit Raumtitel.
     """
     filename = f"{raum.name.lower().replace(' ', '_')}.png"
@@ -160,13 +165,6 @@ def load_room_background(raum: Raum, target_size: Tuple[int, int]) -> pygame.Sur
     surf.fill(DARK_BLUE)
     title = FONT_BIG.render(raum.name, True, ACCENT)
     surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
-    # Kurzbeschreibung
-    desc_lines = wrap_text(raum.beschreibung, FONT, target_size[0] - 40)
-    y = 70
-    for dl in desc_lines[:5]:
-        ts = FONT.render(dl, True, WHITE)
-        surf.blit(ts, (20, y))
-        y += ts.get_height() + 6
     return surf
 
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> List[str]:
@@ -191,9 +189,11 @@ class GameApp:
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Team-Adventure (Pygame)")
 
-        # Bestehendes Spiel initialisieren
-        self.spiel = Spiel()
-        self.current_room: Raum = self.spiel.aktueller_raum
+        # Setup-Daten laden (Personen & Räume)
+        setup = Setup()
+        self.personen = setup.personen_erzeugen()
+        self.raeume = setup.raum_erzeugen(self.personen)
+        self.aktueller_raum: Raum = self.raeume["flur"]
 
         # UI-Elemente (Panels)
         self.panel_people = Panel(pygame.Rect(self.width - 330, 20, 310, 280), "Personen hier")
@@ -212,26 +212,25 @@ class GameApp:
         self.active_portrait: Optional[pygame.Surface] = None
 
         # Preload Hintergrund
-        self.room_bg = load_room_background(self.current_room, (self.width - 360, self.height - 200))
+        self.room_bg = load_room_background(self.aktueller_raum, (self.width - 360, self.height - 200))
 
         self.rebuild_room_ui(full=True)
         self.log.add("Willkommen zum Team-Adventure! (Pygame)")
-        self.log.add(f"Du befindest dich im {self.current_room.name}.")
+        self.log.add(f"Du befindest dich im {self.aktueller_raum.name}.")
 
         self.clock = pygame.time.Clock()
         self.running = True
 
     def rebuild_room_ui(self, full=False):
         """Erstellt die Buttons neu, basierend auf dem aktuellen Raumzustand."""
-        self.current_room = self.spiel.aktueller_raum
         if full:
-            self.room_bg = load_room_background(self.current_room, (self.width - 360, self.height - 200))
+            self.room_bg = load_room_background(self.aktueller_raum, (self.width - 360, self.height - 200))
 
         # Personen-Buttons
         self.person_buttons.clear()
         x = self.panel_people.rect.x + 15
         y = self.panel_people.rect.y + 50
-        for p in self.current_room.personen:
+        for p in self.aktueller_raum.personen:
             rect = pygame.Rect(x, y, 280, 40)
             self.person_buttons.append(Button(rect, f"{p.name} ({p.rolle})", lambda pers=p: self.on_person_clicked(pers)))
             y += 50
@@ -240,7 +239,7 @@ class GameApp:
         self.nav_buttons.clear()
         x = self.panel_nav.rect.x + 15
         y = self.panel_nav.rect.y + 50
-        for vr in self.current_room.verbindungen:
+        for vr in self.aktueller_raum.verbindungen:
             rect = pygame.Rect(x, y, 280, 40)
             self.nav_buttons.append(Button(rect, vr.name, lambda ziel=vr: self.on_change_room(ziel.name)))
             y += 50
@@ -256,11 +255,11 @@ class GameApp:
         self.task_buttons.clear()
         x = self.panel_tasks.rect.x + 15
         y = self.panel_tasks.rect.y + 50
-        if not self.current_room.aufgaben:
+        if not self.aktueller_raum.aufgaben:
             rect = pygame.Rect(x, y, 280, 36)
             self.task_buttons.append(Button(rect, "Keine Aufgaben hier", lambda: None))
             return
-        for aufgabe in self.current_room.aufgaben:
+        for aufgabe in self.aktueller_raum.aufgaben:
             # Jede Aufgabe per Klick ausführen
             label = f"[{aufgabe.id}] {aufgabe.name}"
             rect = pygame.Rect(x, y, 280, 36)
@@ -270,18 +269,16 @@ class GameApp:
     def on_person_clicked(self, person: Person):
         """Person ausgewählt → Dialogoptionen zeigen (statt input())."""
         self.active_person = person
+        # Portrait laden (z. B. ../assets/People/Kirsten/kirstenNeutral.png)
         self.active_portrait = load_person_portrait(person.name, (420, 420))
         if self.active_portrait:
             self.log.add(f"[Portrait] {person.name} geladen.")
         else:
-            self.log.add(f"[Portrait] Für {person.name} nicht gefunden.") 
+            self.log.add(f"[Portrait] Für {person.name} nicht gefunden.")
         self.log.add(f"{person.name}: \"Hallo! Möchtest du etwas für mich erledigen?\"")
         self.dialog_buttons.clear()
 
         # Drei Optionen wie in eurer Terminal-Version
-        # JA -> Aufgabe von Person erzeugen, Beziehung +2
-        # NEIN -> nur Text, Beziehung +0
-        # SMALLTALK -> je nach Rede-Lust Text, Beziehung +1
         base_y = self.height - 220
         options = [
             ("Ja", lambda: self.choose_dialog("ja")),
@@ -302,11 +299,11 @@ class GameApp:
         if ans == "ja":
             self.log.add(f"Du: \"Ja.\"")
             self.log.add(f"{p.name}: \"Super! Ich habe eine Aufgabe für dich.\"")
-            # Aufgabe erzeugen: nutzt eure vorhandene Logik
-            self.spiel.aufgabe_von_person_p(p)
+            # Aufgabe erzeugen: aus alter Spiel-Logik übernommen
+            self.create_task_from_person(p)
             p.relationship += 2
             self.log.add(f"(Beziehung zu {p.name} +2 → {p.relationship})")
-            # Aufgaben-Panel neu bauen (könnte in anderem Raum liegen, also nur Anzeige dieses Raums)
+            # Aufgaben-Panel neu bauen
             self.build_task_buttons()
         elif ans == "smalltalk":
             self.log.add("Du: \"Smalltalk.\"")
@@ -327,11 +324,44 @@ class GameApp:
         self.active_person = None
         self.active_portrait = None
 
+    def create_task_from_person(self, person: Person):
+        """Erzeugt eine Aufgabe abhängig von der Person und legt sie im passenden Raum ab."""
+        if person.name == "Holger":
+            neue_aufgabe = Aufgabe(10, "Brief abgeben", "Gehe zur Post und gib den Brief ab.")
+            self.raeume["post"].aufgaben.append(neue_aufgabe)
+            self.log.add(f"{person.name} gibt dir die Aufgabe: [{neue_aufgabe.id}] {neue_aufgabe.name}")
+        elif person.name == "Flo":
+            neue_aufgabe = Aufgabe(11, "Dokument drucken", "Drucke ein Dokument im Druckerraum.")
+            self.raeume["druckerraum"].aufgaben.append(neue_aufgabe)
+            self.log.add(f"{person.name} gibt dir die Aufgabe: [{neue_aufgabe.id}] {neue_aufgabe.name}")
+        elif person.name == "Kirsten":
+            neue_aufgabe = Aufgabe(12, "Technik kontrollieren", "Überprüfe die Technik im Technikraum.")
+            self.raeume["technikraum"].aufgaben.append(neue_aufgabe)
+            self.log.add(f"{person.name} gibt dir die Aufgabe: [{neue_aufgabe.id}] {neue_aufgabe.name}")
+        else:
+            self.log.add(f"{person.name} hat aktuell keine Aufgabe für dich.")
+
+    def raum_wechseln(self, neuer_raum: str):
+        """Wechselt den Raum, wenn eine Verbindung existiert (neuer_raum: lowercase Name)."""
+        for raum in self.aktueller_raum.verbindungen:
+            if raum.name.lower() == neuer_raum:
+                self.aktueller_raum = raum
+                self.log.add(f"Du bist jetzt im {self.aktueller_raum.name}.")
+                return
+        self.log.add("Du kannst nicht dorthin gehen.")
+
+    def aufgabe_ausfuehren(self, aufgabe_id: int):
+        """Führt eine Aufgabe im aktuellen Raum aus und entfernt sie."""
+        for aufgabe in list(self.aktueller_raum.aufgaben):
+            if aufgabe.id == aufgabe_id:
+                self.log.add(f"Aufgabe '{aufgabe.name}' ausgeführt!")
+                self.aktueller_raum.aufgaben.remove(aufgabe)
+                return
+        self.log.add("Ungültige Aufgaben-ID.")
+
     def on_change_room(self, zielraum_name: str):
-        """Raumwechsel: ruft eure Logik anstatt input()."""
-        # Euer raum_wechseln erwartet lower-cased Namen
-        self.spiel.raum_wechseln(zielraum_name.lower())
-        self.log.add(f"(Du gehst nach: {self.spiel.aktueller_raum.name})")
+        """Raumwechsel via Button."""
+        self.raum_wechseln(zielraum_name.lower())
         self.rebuild_room_ui(full=True)
         self.active_portrait = None
 
@@ -339,11 +369,11 @@ class GameApp:
         """Aufgabe im aktuellen Raum ausführen (wie 'aufgabe_ausfuehren')."""
         # Prüfen, ob Aufgabe existiert
         found = False
-        for a in list(self.spiel.aktueller_raum.aufgaben):
+        for a in list(self.aktueller_raum.aufgaben):
             if a.id == aufgabe_id:
                 found = True
                 self.log.add(f"Aufgabe '{a.name}' ausgeführt!")
-                self.spiel.aktueller_raum.aufgaben.remove(a)
+                self.aktueller_raum.aufgaben.remove(a)
                 break
         if not found:
             self.log.add("Ungültige Aufgaben-ID oder Aufgabe nicht in diesem Raum.")
@@ -380,7 +410,6 @@ class GameApp:
         for b in self.task_buttons: b.draw(self.screen)
         for b in self.dialog_buttons: b.draw(self.screen)
 
-
         # Log
         self.log.draw(self.screen)
 
@@ -399,7 +428,6 @@ class GameApp:
             self.clock.tick(60)
 
         pygame.quit()
-
 
 if __name__ == "__main__":
     app = GameApp()
