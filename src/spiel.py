@@ -39,7 +39,7 @@ class Spiel:
 
         return {
             "flur": flur,
-            "büro1": buero1,
+            "büro": buero1,
             "großraumbüro": grossraumbuero,
             "post": post,
             "technikraum": technikraum,
@@ -68,7 +68,10 @@ class Spiel:
         print("Du kannst folgende Aktionen ausführen:")
         aktionen = ["raum wechseln", "mit person sprechen", "aufgabe ausführen", "aufgabe anzeigen", "status"]
         print(" - " + ", ".join(aktionen))
-        print("In diesem Raum sind:", [p.name for p in self.aktueller_raum.personen])
+        if self.aktueller_raum.personen == []:
+            print("In diesem Raum sind keine Personen.")
+        elif self.aktueller_raum.personen: 
+            print("In diesem Raum sind:", [p.name for p in self.aktueller_raum.personen])
 
         eingabe = input("Was möchtest du tun? ").strip().lower()
         if eingabe == "raum wechseln":
