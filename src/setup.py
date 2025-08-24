@@ -1,12 +1,11 @@
-from raum import Raum
-from aufgabe import Aufgabe
 from person import Person
+from raum import Raum
 
-class Spiel:
-    def __init__(self):
-        self.personen = self.personen_erzeugen()
-        self.raeume = self.raum_erzeugen()
-        self.aktueller_raum = self.raeume["flur"]
+class Setup:
+    """
+    Verantwortlich für das reine Anlegen von Personen und Räumen.
+    Keine Game-Loop- oder IO-Methoden.
+    """
 
     def personen_erzeugen(self):
         holger = Person("Holger", "Teamleiter", "Sehr nett und immer hilfsbereit.", rede_lust=4)
@@ -18,10 +17,10 @@ class Spiel:
             "kirsten": kirsten
         }
 
-    def raum_erzeugen(self):
+    def raum_erzeugen(self, personen):
         flur = Raum("Flur", "Du siehst einen langen Gang mit ganz vielen Räumen.")
-        buero1 = Raum("Büro 1", "Ein schickes Büro mit PC und Kaffee.", personen=[self.personen["holger"]])
-        grossraumbuero = Raum("Großraumbüro", "Viele Tische und Arbeitsplätze.", personen=[self.personen["flo"], self.personen["kirsten"]])
+        buero1 = Raum("Büro 1", "Ein schickes Büro mit PC und Kaffee.", personen=[personen["holger"]])
+        grossraumbuero = Raum("Großraumbüro", "Viele Tische und Arbeitsplätze.", personen=[personen["flo"], personen["kirsten"]])
         post = Raum("Post", "Du siehst einen kleinen Raum mit einem Tisch und einem Stuhl.")
         technikraum = Raum("Technik", "Du siehst einen Raum voller Computer und Technik.")
         druckerraum = Raum("Drucker", "Du siehst einen Raum mit einem Drucker.")
@@ -45,28 +44,3 @@ class Spiel:
             "technikraum": technikraum,
             "druckerraum": druckerraum
         }
-
-    def raum_wechseln(self, neuer_raum):
-        for raum in self.aktueller_raum.verbindungen:
-            if raum.name.lower() == neuer_raum:
-                self.aktueller_raum = raum
-                self.raum_betreten()
-                return
-        print("Du kannst nicht dorthin gehen.")
-
-    def aufgabe_ausfuehren(self, aufgabe_id):
-        for aufgabe in self.aktueller_raum.aufgaben:
-            if aufgabe.id == aufgabe_id:
-                print(f"Aufgabe '{aufgabe.name}' ausgeführt!")
-                self.aktueller_raum.aufgaben.remove(aufgabe)
-                return
-        print("Ungültige Aufgaben-ID.")
-
-    
-
-
-
-    def spiel_starten(self):
-        print("\nWillkommen zum Team-Adventure!")
-        while True:
-            self.raum_betreten()
