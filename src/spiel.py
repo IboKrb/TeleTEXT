@@ -63,24 +63,24 @@ class Spiel:
         print("Ungültige Aufgaben-ID.")
 
     def raum_betreten(self):
-        print(f"\nDu bist jetzt im {self.aktueller_raum.name}.")
+        print(f"\nDu bist jetzt im {self.aktueller_raum.name}. \n")
         print(self.aktueller_raum.beschreibung)
-        print("Du kannst folgende Aktionen ausführen:")
+        print("\nDu kannst folgende Aktionen ausführen:")
         aktionen = ["raum wechseln", "mit person sprechen", "aufgabe ausführen", "aufgabe anzeigen", "status"]
         print(" - " + ", ".join(aktionen))
         if self.aktueller_raum.personen == []:
-            print("In diesem Raum sind keine Personen.")
+            print("\nIn diesem Raum sind keine Personen.")
         elif self.aktueller_raum.personen: 
-            print("In diesem Raum sind:", [p.name for p in self.aktueller_raum.personen])
+            print("\nIn diesem Raum sind:", [p.name for p in self.aktueller_raum.personen])
 
-        eingabe = input("Was möchtest du tun? ").strip().lower()
+        eingabe = input("\nWas möchtest du tun? ").strip().lower()
         if eingabe == "raum wechseln":
-            print("Mögliche Räume:", [raum.name for raum in self.aktueller_raum.verbindungen])
-            zielraum = input("Wohin möchtest du gehen? ").strip().lower()
+            print("\nMögliche Räume:", [raum.name for raum in self.aktueller_raum.verbindungen])
+            zielraum = input("\nWohin möchtest du gehen? ").strip().lower()
             self.raum_wechseln(zielraum)
         elif eingabe == "mit person sprechen":
             if self.aktueller_raum.personen:
-                print("Mit wem möchtest du sprechen?", [p.name for p in self.aktueller_raum.personen])
+                print("\nMit wem möchtest du sprechen?", [p.name for p in self.aktueller_raum.personen])
                 person_name = input("Name der Person: ").strip().capitalize()
                 for p in self.aktueller_raum.personen:
                     if p.name.lower() == person_name.lower():
@@ -92,15 +92,15 @@ class Spiel:
                             p.beziehung_steigern(1)
                         break
                 else:
-                    print("Diese Person ist nicht hier.")
+                    print("\nDiese Person ist nicht hier.")
             else:
-                print("Hier ist gerade niemand.")
+                print("\nHier ist gerade niemand.")
         elif eingabe == "aufgabe anzeigen":
             if self.aktueller_raum.aufgaben:
                 for aufgabe in self.aktueller_raum.aufgaben:
                     print(aufgabe)
             else:
-                print("Keine Aufgaben verfügbar.")
+                print("\nKeine Aufgaben verfügbar.")
         elif eingabe == "aufgabe ausführen":
             if self.aktueller_raum.aufgaben:
                 for aufgabe in self.aktueller_raum.aufgaben:
@@ -109,12 +109,12 @@ class Spiel:
                     aufgabe_id = int(input("Aufgabe ID ausführen: "))
                     self.aufgabe_ausfuehren(aufgabe_id)
                 except ValueError:
-                    print("Ungültige Eingabe.")
+                    print("\nUngültige Eingabe.")
             else:
                 print("Keine Aufgaben hier.")
         elif eingabe == "status":
             for pname, p in self.personen.items():
-                print(f"{p.name}: Beziehung {p.relationship}")
+                print(f"\n{p.name}: Beziehung {p.relationship}")
         else:
             print("Aktion nicht erkannt.")
 
@@ -122,17 +122,17 @@ class Spiel:
         if person.name == "Holger":
             neue_aufgabe = Aufgabe(10, "Brief abgeben", "Gehe zur Post und gib den Brief ab.")
             self.raeume["post"].aufgaben.append(neue_aufgabe)
-            print(f"{person.name} gibt dir die Aufgabe: {neue_aufgabe}")
+            print(f"\n{person.name} gibt dir die Aufgabe: {neue_aufgabe}")
         elif person.name == "Flo":
             neue_aufgabe = Aufgabe(11, "Dokument drucken", "Drucke ein Dokument im Druckerraum.")
             self.raeume["druckerraum"].aufgaben.append(neue_aufgabe)
-            print(f"{person.name} gibt dir die Aufgabe: {neue_aufgabe}")
+            print(f"\n{person.name} gibt dir die Aufgabe: {neue_aufgabe}")
         elif person.name == "Kirsten":
             neue_aufgabe = Aufgabe(12, "Technik kontrollieren", "Überprüfe die Technik im Technikraum.")
             self.raeume["technikraum"].aufgaben.append(neue_aufgabe)
-            print(f"{person.name} gibt dir die Aufgabe: {neue_aufgabe}")
+            print(f"\n{person.name} gibt dir die Aufgabe: {neue_aufgabe}")
 
     def spiel_starten(self):
-        print("Willkommen zum Team-Adventure!")
+        print("\nWillkommen zum Team-Adventure!")
         while True:
             self.raum_betreten()
