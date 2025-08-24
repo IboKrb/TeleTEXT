@@ -64,33 +64,73 @@ class Panel:
             surface.blit(title_surf, (self.rect.x + 12, self.rect.y + 8))
 
 class TextLog:
-    """Scrollbarer Text-Log für Dialoge/Status."""
-    def __init__(self, rect: pygame.Rect, max_lines: int = 10):
+    """Scrollbarer Text-Log mit anpassbarem Rahmen."""
+    def __init__(
+        self,
+        rect: pygame.Rect,
+        max_lines: int = 10,
+        title: str = "Log",
+        bg_color: Tuple[int,int,int] = (245, 245, 250),
+        border_color: Tuple[int,int,int] = (0, 0, 0),
+        border_width: int = 2,
+        radius: int = 12,
+        text_color: Tuple[int,int,int] = (0, 0, 0),
+        pad: int = 10,
+        title_color: Tuple[int,int,int] = (0, 0, 0)
+    ):
         self.rect = rect
         self.lines: List[str] = []
         self.max_lines = max_lines
         self.scroll_offset = 0
+        self.title = title
+        self.bg_color = bg_color
+        self.border_color = border_color
+        self.border_width = border_width
+        self.radius = radius
+        self.text_color = text_color
+        self.pad = pad
+        self.title_color = title_color
 
     def add(self, line: str):
-        # Split lange Zeilen grob
+        # Einfache Zeilenumbrüche
         max_chars = 80
         while len(line) > max_chars:
             self.lines.append(line[:max_chars])
             line = line[max_chars:]
         self.lines.append(line)
-        # Auf Max-Linien beschränken
-        if len(self.lines) > 500:
-            self.lines = self.lines[-500:]
+        if len(self.lines) > 1000:
+            self.lines = self.lines[-1000:]
+
+        # Beim neuen Eintrag automatisch ans Ende scrollen
+        self.scroll_offset = 0
+
+    def handle_event(self, event: pygame.event.Event):
+        if event.type == pygame.MOUSEWHEEL:
+            # Nach oben: y > 0 => ältere Zeilen sichtbar machen
+            self.scroll_offset -= event.y
+            self.scroll_offset = max(0, min(self.scroll_offset, max(0, len(self.lines) - self.max_lines)))
 
     def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, WHITE, self.rect, border_radius=8)
-        pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=8)
-        # Text einzeichnen
-        x = self.rect.x + 10
-        y = self.rect.y + 8
-        visible = self.lines[-self.max_lines:]
+        # Hintergrund + Rahmen
+        pygame.draw.rect(surface, self.bg_color, self.rect, border_radius=self.radius)
+        pygame.draw.rect(surface, self.border_color, self.rect, self.border_width, border_radius=self.radius)
+
+        x = self.rect.x + self.pad
+        y = self.rect.y + self.pad
+
+        # Optionaler Titel oben links
+        if self.title:
+            title_surf = FONT_SMALL.render(self.title, True, self.title_color)
+            surface.blit(title_surf, (x, y))
+            y += title_surf.get_height() + 6
+
+        # Sichtbaren Bereich bestimmen (mit Scroll)
+        start = max(0, len(self.lines) - self.max_lines - self.scroll_offset)
+        end = start + self.max_lines
+        visible = self.lines[start:end]
+
         for line in visible:
-            ts = FONT_SMALL.render(line, True, BLACK)
+            ts = FONT_SMALL.render(line, True, self.text_color)
             surface.blit(ts, (x, y))
             y += ts.get_height() + 4
 
@@ -186,7 +226,7 @@ class GameApp:
     def __init__(self, width=1280, height=720):
         self.width = width
         self.height = height
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        self.screen = pygame.display.set_mode((0,0),pygame.FULLSCREEN)
         pygame.display.set_caption("Team-Adventure (Pygame)")
 
         # Setup-Daten laden (Personen & Räume)
@@ -197,9 +237,20 @@ class GameApp:
 
         # UI-Elemente (Panels)
         self.panel_people = Panel(pygame.Rect(self.width - 330, 20, 310, 280), "Personen hier")
-        self.panel_nav = Panel(pygame.Rect(self.width - 330, 320, 310, 220), "Wechseln")
+        self.panel_nav = Panel(pygame.Rect(self.width - 330, 320, 310, 220), "Raum Wechseln")
         self.panel_tasks = Panel(pygame.Rect(self.width - 330, 560, 310, 140), "Aufgaben")
-        self.log = TextLog(pygame.Rect(20, self.height - 180, self.width - 370, 160), max_lines=8)
+        self.log = TextLog(
+            pygame.Rect(20, self.height - 200, self.width - 360, 180),
+            max_lines=9,
+            title="Nachrichten",
+            bg_color=(20, 22, 28),
+            border_color=(255, 255, 255),
+            border_width=2,
+            radius=16,
+            text_color=(230, 230, 230),
+            title_color=(200, 200, 255)
+)
+
 
         # Buttons dynamisch je nach Raum
         self.person_buttons: List[Button] = []
@@ -211,10 +262,43 @@ class GameApp:
         self.active_person: Optional[Person] = None
         self.active_portrait: Optional[pygame.Surface] = None
 
-        # Preload Hintergrund
-        self.room_bg = load_room_background(self.aktueller_raum, (self.width - 360, self.height - 200))
+        def preload_room_backgrounds(raeume, target_size):
+            cache = {}
+            for raum in raeume.values():
+                filename = f"{raum.name.lower().replace(' ', '_')}.png"
+                path = os.path.join(ASSETS_DIR, filename)
+                if os.path.exists(path):
+                    try:
+                        img = pygame.image.load(path).convert()
+                        img = pygame.transform.smoothscale(img, target_size)
+                        cache[raum.name] = img
+                    except Exception:
+                        # Defektes Bild → Fallback
+                        surf = pygame.Surface(target_size)
+                        surf.fill(DARK_BLUE)
+                        title = FONT_BIG.render(raum.name, True, ACCENT)
+                        surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
+                        cache[raum.name] = surf
+                else:
+                    # Fallback: einfärben + Titel
+                    surf = pygame.Surface(target_size)
+                    surf.fill(DARK_BLUE)
+                    title = FONT_BIG.render(raum.name, True, ACCENT)
+                    surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
+                    cache[raum.name] = surf
 
-        self.rebuild_room_ui(full=True)
+            return cache  # <- WICHTIG: außerhalb der Schleife, nicht im else!
+
+
+       # Preload Hintergründe (einmalig)
+        self.room_backgrounds = preload_room_backgrounds(
+            self.raeume, (self.width - 360, self.height - 200)
+        )
+        self.room_bg = self.room_backgrounds[self.aktueller_raum.name]
+
+        # UI aufbauen, aber HINTERGRUND NICHT neu laden
+        self.rebuild_room_ui(full=False)
+
         self.log.add("Willkommen zum Team-Adventure! (Pygame)")
         self.log.add(f"Du befindest dich im {self.aktueller_raum.name}.")
 
@@ -362,7 +446,8 @@ class GameApp:
     def on_change_room(self, zielraum_name: str):
         """Raumwechsel via Button."""
         self.raum_wechseln(zielraum_name.lower())
-        self.rebuild_room_ui(full=True)
+        self.rebuild_room_ui(full=False)  
+        self.room_bg = self.room_backgrounds[self.aktueller_raum.name]
         self.active_portrait = None
 
     def on_execute_task(self, aufgabe_id: int):
@@ -420,6 +505,7 @@ class GameApp:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                    self.log.handle_event(event)  # <— hinzufügen
                 # Button Events
                 for b in (self.person_buttons + self.nav_buttons + self.task_buttons + self.dialog_buttons):
                     b.handle_event(event)
