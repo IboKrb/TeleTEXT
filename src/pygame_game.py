@@ -104,7 +104,7 @@ class TextLog:
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "../assets/Rooms")
 
 ASSETS_ROOTS = [
-    os.path.join(os.path.dirname(__file__), "../assets/People")
+    os.path.join(os.path.dirname(__file__), "../assets")
     
 ]
 
@@ -117,13 +117,12 @@ def load_person_portrait(person_name: str, target_size: Tuple[int, int]) -> Opti
     """
     folder_name = person_name
     basefile = person_name[:1].lower() + person_name[1:] + "Neutral"
-    print(ASSETS_ROOTS)
     candidates = []
     for root in ASSETS_ROOTS:
         base_dir = os.path.join(root, "People", folder_name)
         for ext in (".png", ".jpg", ".jpeg", ".webp"):
             candidates.append(os.path.join(base_dir, basefile + ext))
-
+    
     for path in candidates:
         if os.path.exists(path):
             try:
@@ -271,7 +270,7 @@ class GameApp:
     def on_person_clicked(self, person: Person):
         """Person ausgewählt → Dialogoptionen zeigen (statt input())."""
         self.active_person = person
-        self.active_portrait = load_person_portrait(person.name, (320, 420))
+        self.active_portrait = load_person_portrait(person.name, (420, 420))
         if self.active_portrait:
             self.log.add(f"[Portrait] {person.name} geladen.")
         else:
@@ -360,16 +359,14 @@ class GameApp:
 
         # Portrait im Raum-Bereich anzeigen, falls vorhanden
         if self.active_portrait:
-            portrait_frame = pygame.Rect(room_area.x + 20, room_area.y + 60, 320, 420)
-            pygame.draw.rect(self.screen, (245, 245, 250), portrait_frame, border_radius=12)
-            pygame.draw.rect(self.screen, BLACK, portrait_frame, 2, border_radius=12)
+            portrait_frame = pygame.Rect(room_area.x + 600, room_area.y + 120, 320, 420)
             img_rect = self.active_portrait.get_rect(center=portrait_frame.center)
             prev_clip = self.screen.get_clip()
             self.screen.set_clip(portrait_frame)
             self.screen.blit(self.active_portrait, img_rect)
             self.screen.set_clip(prev_clip)
             if self.active_person:
-                name_ts = FONT_BIG.render(self.active_person.name, True, BLACK)
+                name_ts = FONT_BIG.render(self.active_person.name, True, WHITE)
                 self.screen.blit(name_ts, (portrait_frame.x + 12, portrait_frame.y + 10))
 
         # Panels
@@ -383,13 +380,6 @@ class GameApp:
         for b in self.task_buttons: b.draw(self.screen)
         for b in self.dialog_buttons: b.draw(self.screen)
 
-        # Statusleiste: aktueller Raum
-        status_rect = pygame.Rect(20, self.height - 220, self.width - 360, 30)
-        pygame.draw.rect(self.screen, (230, 230, 235), status_rect, border_radius=6)
-        pygame.draw.rect(self.screen, BLACK, status_rect, 2, border_radius=6)
-        status_text = f"Raum: {self.spiel.aktueller_raum.name} | Personen: {', '.join([p.name for p in self.spiel.aktueller_raum.personen]) if self.spiel.aktueller_raum.personen else '—'}"
-        st = FONT.render(status_text, True, BLACK)
-        self.screen.blit(st, (status_rect.x + 10, status_rect.y + 5))
 
         # Log
         self.log.draw(self.screen)
