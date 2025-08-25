@@ -28,19 +28,21 @@ DARK_BLUE = (25, 35, 60)
 ACCENT = (240, 240, 120)
 
 class Button:
-    def __init__(self, rect: pygame.Rect, text: str, callback, tooltip: Optional[str] = None):
+    def __init__(self, rect: pygame.Rect, text: str, callback, tooltip: Optional[str] = None, font: Optional[pygame.font.Font] = None):   # <- NEU):
         self.rect = rect
         self.text = text
         self.callback = callback
         self.tooltip = tooltip
         self.hover = False
+        self.font = FONT  # <- NEU
 
     def draw(self, surface: pygame.Surface):
         color = LIGHT_GRAY if self.hover else WHITE
         pygame.draw.rect(surface, color, self.rect, border_radius=8)
         pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=8)
-        text_surf = FONT.render(self.text, True, BLACK)
+        text_surf = self.font.render(self.text, True, BLACK) # <- geändert
         surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
+        text_surf = self.font.render(self.text, True, BLACK)  # <- nutzt self.font
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEMOTION:
@@ -51,7 +53,6 @@ class Button:
                     self.callback()
 
 class Panel:
-    """Einfaches Rechteck-Panel mit Titel; verwendet für Seitenleisten/Log-Fenster."""
     def __init__(self, rect: pygame.Rect, title: str = ""):
         self.rect = rect
         self.title = title
@@ -62,6 +63,15 @@ class Panel:
         if self.title:
             title_surf = FONT_BIG.render(self.title, True, BLACK)
             surface.blit(title_surf, (self.rect.x + 12, self.rect.y + 8))
+
+    def content_rect(self, pad: int = 12) -> pygame.Rect:
+        title_h = (FONT_BIG.get_height() + 12) if self.title else 0
+        return pygame.Rect(
+            self.rect.x + pad,
+            self.rect.y + pad + title_h,
+            self.rect.width - 2*pad,
+            self.rect.height - 2*pad - title_h
+        )
 
 class TextLog:
     """Scrollbarer Text-Log mit anpassbarem Rahmen."""
@@ -145,27 +155,26 @@ ASSETS_DIR = os.path.join(os.path.dirname(__file__), "../assets/Rooms")
 # Personen-Portraits laden
 ################################################################################
 
-# Wir erlauben ../assets als Root
+################################################################################
+# Personen-Portraits laden
+################################################################################
+
+################################################################################
+# Personen-Portraits laden
+################################################################################
+
 ASSETS_ROOTS = [
     os.path.join(os.path.dirname(__file__), "../assets"),
 ]
 
 def load_person_portrait(person_name: str, target_size: Tuple[int, int]) -> Optional[pygame.Surface]:
-    """
-    Erwartete Struktur (Case-sensitiv je nach OS):
-        ../assets/People/<PersonenName>/<nameNeutral>.(png|jpg|jpeg|webp)
-    Beispiel:
-        ../assets/People/Kirsten/kirstenNeutral.png
-    """
     folder_name = person_name
     basefile = person_name[:1].lower() + person_name[1:] + "Neutral"
-
     candidates = []
     for root in ASSETS_ROOTS:
         base_dir = os.path.join(root, "People", folder_name)
         for ext in (".png", ".jpg", ".jpeg", ".webp"):
             candidates.append(os.path.join(base_dir, basefile + ext))
-
     for path in candidates:
         if os.path.exists(path):
             try:
@@ -186,10 +195,6 @@ def scale_to_fit(surface: pygame.Surface, target: Tuple[int, int]) -> pygame.Sur
     return pygame.transform.smoothscale(surface, (nw, nh))
 
 def load_room_background(raum: Raum, target_size: Tuple[int, int]) -> pygame.Surface:
-    """
-    Versucht, ein Hintergrundbild aus ../assets/Rooms/<raumname>.png zu laden.
-    Fallback: einfärbte Fläche mit Raumtitel.
-    """
     filename = f"{raum.name.lower().replace(' ', '_')}.png"
     path = os.path.join(ASSETS_DIR, filename)
     surf = pygame.Surface(target_size)
@@ -200,216 +205,230 @@ def load_room_background(raum: Raum, target_size: Tuple[int, int]) -> pygame.Sur
             return img
         except Exception:
             pass
-
-    # Fallback: einfärben + Titel
     surf.fill(DARK_BLUE)
     title = FONT_BIG.render(raum.name, True, ACCENT)
     surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
     return surf
 
-def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> List[str]:
-    words = text.split(" ")
-    lines = []
-    cur = ""
-    for w in words:
-        test = (cur + " " + w).strip()
-        if font.size(test)[0] <= max_width:
-            cur = test
+def preload_room_backgrounds(raeume, target_size):
+    """Einmalig beim Start alle Raum-Hintergründe laden & skalieren."""
+    cache = {}
+    for raum in raeume.values():
+        filename = f"{raum.name.lower().replace(' ', '_')}.png"
+        path = os.path.join(ASSETS_DIR, filename)
+        if os.path.exists(path):
+            try:
+                img = pygame.image.load(path).convert()
+                img = pygame.transform.smoothscale(img, target_size)
+                cache[raum.name] = img
+            except Exception:
+                surf = pygame.Surface(target_size)
+                surf.fill(DARK_BLUE)
+                title = FONT_BIG.render(raum.name, True, ACCENT)
+                surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
+                cache[raum.name] = surf
         else:
-            lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
+            surf = pygame.Surface(target_size)
+            surf.fill(DARK_BLUE)
+            title = FONT_BIG.render(raum.name, True, ACCENT)
+            surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
+            cache[raum.name] = surf
+    return cache
 
 class GameApp:
+
+    def get_room_area(self) -> pygame.Rect:
+        # gleiche Fläche wie beim Zeichnen des Hintergrunds
+        return pygame.Rect(20, 20, self.width - 360, self.height - 200)
+    
+    def build_dialog_buttons(self):
+        self.dialog_buttons.clear()
+
+        room_area = self.get_room_area()
+        # Unterkante, die nicht vom Log verdeckt wird
+        safe_bottom = self.log.rect.y - 12
+    # Verdoppelt:
+        btn_h = 76      # vorher 38
+        btn_w = 320     # vorher 160
+        gap   = 24      # vorher 12
+        # Eine Zeile Buttons direkt über dem Log, aber noch innerhalb des Raum-Bereichs
+        y = max(room_area.y + 8, safe_bottom - btn_h - 8)
+        x = room_area.x + 30
+
+        options = [
+            ("Ja",       lambda: self.choose_dialog("ja")),
+            ("Nein",     lambda: self.choose_dialog("nein")),
+            ("Smalltalk",lambda: self.choose_dialog("smalltalk")),
+            ("Gespräch beenden", self.end_conversation),
+        ]
+        for text, cb in options:
+            rect = pygame.Rect(x, y, btn_w, btn_h)
+            self.dialog_buttons.append(Button(rect, text, cb, font=FONT_BIG))
+            x += btn_w + gap
+
+
     def __init__(self, width=1280, height=720):
         self.width = width
         self.height = height
-        self.screen = pygame.display.set_mode((0,0),pygame.FULLSCREEN)
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        self.width, self.height = self.screen.get_size()
         pygame.display.set_caption("Team-Adventure (Pygame)")
 
-        # Setup-Daten laden (Personen & Räume)
         setup = Setup()
         self.personen = setup.personen_erzeugen()
         self.raeume = setup.raum_erzeugen(self.personen)
         self.aktueller_raum: Raum = self.raeume["flur"]
 
-        # UI-Elemente (Panels)
         self.panel_people = Panel(pygame.Rect(self.width - 330, 20, 310, 280), "Personen hier")
-        self.panel_nav = Panel(pygame.Rect(self.width - 330, 320, 310, 220), "Raum Wechseln")
-        self.panel_tasks = Panel(pygame.Rect(self.width - 330, 560, 310, 140), "Aufgaben")
+        self.panel_nav    = Panel(pygame.Rect(self.width - 330, 320, 310, 300), "Raum wechseln")
+        self.panel_tasks  = Panel(pygame.Rect(self.width - 330, 650, 310, 140), "Aufgaben")
+
         self.log = TextLog(
             pygame.Rect(20, self.height - 200, self.width - 360, 180),
-            max_lines=9,
-            title="Nachrichten",
+            max_lines=6,
             bg_color=(20, 22, 28),
             border_color=(255, 255, 255),
             border_width=2,
             radius=16,
             text_color=(230, 230, 230),
             title_color=(200, 200, 255)
-)
+        )
 
-
-        # Buttons dynamisch je nach Raum
         self.person_buttons: List[Button] = []
         self.nav_buttons: List[Button] = []
         self.task_buttons: List[Button] = []
-
-        # Action-Buttons (Dialogoptionen), eingeblendet wenn Person angeklickt
         self.dialog_buttons: List[Button] = []
         self.active_person: Optional[Person] = None
         self.active_portrait: Optional[pygame.Surface] = None
 
-        def preload_room_backgrounds(raeume, target_size):
-            cache = {}
-            for raum in raeume.values():
-                filename = f"{raum.name.lower().replace(' ', '_')}.png"
-                path = os.path.join(ASSETS_DIR, filename)
-                if os.path.exists(path):
-                    try:
-                        img = pygame.image.load(path).convert()
-                        img = pygame.transform.smoothscale(img, target_size)
-                        cache[raum.name] = img
-                    except Exception:
-                        # Defektes Bild → Fallback
-                        surf = pygame.Surface(target_size)
-                        surf.fill(DARK_BLUE)
-                        title = FONT_BIG.render(raum.name, True, ACCENT)
-                        surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
-                        cache[raum.name] = surf
-                else:
-                    # Fallback: einfärben + Titel
-                    surf = pygame.Surface(target_size)
-                    surf.fill(DARK_BLUE)
-                    title = FONT_BIG.render(raum.name, True, ACCENT)
-                    surf.blit(title, title.get_rect(center=(target_size[0] // 2, 30)))
-                    cache[raum.name] = surf
-
-            return cache  # <- WICHTIG: außerhalb der Schleife, nicht im else!
-
-
-       # Preload Hintergründe (einmalig)
+        # Preload Hintergründe (einmalig)
         self.room_backgrounds = preload_room_backgrounds(
             self.raeume, (self.width - 360, self.height - 200)
         )
         self.room_bg = self.room_backgrounds[self.aktueller_raum.name]
 
-        # UI aufbauen, aber HINTERGRUND NICHT neu laden
         self.rebuild_room_ui(full=False)
-
         self.log.add("Willkommen zum Team-Adventure! (Pygame)")
         self.log.add(f"Du befindest dich im {self.aktueller_raum.name}.")
 
         self.clock = pygame.time.Clock()
         self.running = True
 
+    def draw_buttons_in_panel(self, panel: Panel, buttons: List[Button]):
+        """Zeichnet Buttons geclippt in die Panel-Innenfläche."""
+        inner = panel.content_rect()
+        prev = self.screen.get_clip()
+        self.screen.set_clip(inner)
+        for b in buttons:
+            b.draw(self.screen)
+        self.screen.set_clip(prev)
+
     def rebuild_room_ui(self, full=False):
-        """Erstellt die Buttons neu, basierend auf dem aktuellen Raumzustand."""
         if full:
             self.room_bg = load_room_background(self.aktueller_raum, (self.width - 360, self.height - 200))
 
-        # Personen-Buttons
+        # Personen
         self.person_buttons.clear()
-        x = self.panel_people.rect.x + 15
-        y = self.panel_people.rect.y + 50
+        people_inner = self.panel_people.content_rect()
+        x, y, w = people_inner.x, people_inner.y, people_inner.width
         for p in self.aktueller_raum.personen:
-            rect = pygame.Rect(x, y, 280, 40)
-            self.person_buttons.append(Button(rect, f"{p.name} ({p.rolle})", lambda pers=p: self.on_person_clicked(pers)))
-            y += 50
+            rect = pygame.Rect(x, y, w, 40)
+            self.person_buttons.append(Button(rect, f"{p.name} ({p.rolle})",
+                                              lambda pers=p: self.on_person_clicked(pers)))
+            y += 46
 
-        # Navigations-Buttons (verbindungen)
+        # Navigation
         self.nav_buttons.clear()
-        x = self.panel_nav.rect.x + 15
-        y = self.panel_nav.rect.y + 50
+        nav_inner = self.panel_nav.content_rect()
+        x, y, w = nav_inner.x, nav_inner.y, nav_inner.width
         for vr in self.aktueller_raum.verbindungen:
-            rect = pygame.Rect(x, y, 280, 40)
-            self.nav_buttons.append(Button(rect, vr.name, lambda ziel=vr: self.on_change_room(ziel.name)))
-            y += 50
+            rect = pygame.Rect(x, y, w, 40)
+            self.nav_buttons.append(Button(rect, vr.name,
+                                           lambda ziel=vr: self.on_change_room(ziel.name)))
+            y += 46
 
-        # Aufgaben-Buttons (im Raum vorhandene Aufgaben ausführen)
+        # Aufgaben
         self.build_task_buttons()
 
-        # Dialog-Buttons leeren
+        # Dialog-UI reset
         self.dialog_buttons.clear()
         self.active_person = None
+        self.active_portrait = None
 
     def build_task_buttons(self):
         self.task_buttons.clear()
-        x = self.panel_tasks.rect.x + 15
-        y = self.panel_tasks.rect.y + 50
+        task_inner = self.panel_tasks.content_rect()
+        x, y, w = task_inner.x, task_inner.y, task_inner.width
         if not self.aktueller_raum.aufgaben:
-            rect = pygame.Rect(x, y, 280, 36)
+            rect = pygame.Rect(x, y, w, 36)
             self.task_buttons.append(Button(rect, "Keine Aufgaben hier", lambda: None))
             return
         for aufgabe in self.aktueller_raum.aufgaben:
-            # Jede Aufgabe per Klick ausführen
             label = f"[{aufgabe.id}] {aufgabe.name}"
-            rect = pygame.Rect(x, y, 280, 36)
-            self.task_buttons.append(Button(rect, label, lambda a_id=aufgabe.id: self.on_execute_task(a_id)))
+            rect = pygame.Rect(x, y, w, 36)
+            self.task_buttons.append(Button(rect, label,
+                                            lambda a_id=aufgabe.id: self.on_execute_task(a_id)))
             y += 42
 
     def on_person_clicked(self, person: Person):
-        """Person ausgewählt → Dialogoptionen zeigen (statt input())."""
         self.active_person = person
-        # Portrait laden (z. B. ../assets/People/Kirsten/kirstenNeutral.png)
-        self.active_portrait = load_person_portrait(person.name, (420, 420))
+
+        # >>> dynamische Zielgröße fürs Portrait (groß)
+        room_area = self.get_room_area()
+        target_w = int(room_area.width * 0.35)   # ~35% der Raum-Breite
+        target_h = int(room_area.height * 0.90)  # ~90% der Raum-Höhe
+        self.active_portrait = load_person_portrait(person.name, (target_w, target_h))
+        # <<<
+
         if self.active_portrait:
             self.log.add(f"[Portrait] {person.name} geladen.")
         else:
             self.log.add(f"[Portrait] Für {person.name} nicht gefunden.")
-        self.log.add(f"{person.name}: \"Hallo! Möchtest du etwas für mich erledigen?\"")
-        self.dialog_buttons.clear()
+        self.log.add(f'{person.name}: "Hallo! Möchtest du etwas für mich erledigen?"')
 
-        # Drei Optionen wie in eurer Terminal-Version
-        base_y = self.height - 220
-        options = [
-            ("Ja", lambda: self.choose_dialog("ja")),
-            ("Nein", lambda: self.choose_dialog("nein")),
-            ("Smalltalk", lambda: self.choose_dialog("smalltalk")),
-        ]
-        x = 30
-        for text, cb in options:
-            rect = pygame.Rect(x, base_y, 160, 38)
-            self.dialog_buttons.append(Button(rect, text, cb))
-            x += 180
+        # Nur HIER die Dialog-Buttons bauen (oben, nicht vom Log verdeckt)
+        self.build_dialog_buttons()
 
     def choose_dialog(self, answer: str):
         p = self.active_person
         if p is None:
             return
         ans = answer.lower()
+
         if ans == "ja":
-            self.log.add(f"Du: \"Ja.\"")
-            self.log.add(f"{p.name}: \"Super! Ich habe eine Aufgabe für dich.\"")
-            # Aufgabe erzeugen: aus alter Spiel-Logik übernommen
+            self.log.add('Du: "Ja."')
+            self.log.add(f'{p.name}: "Super! Ich habe eine Aufgabe für dich."')
             self.create_task_from_person(p)
             p.relationship += 2
             self.log.add(f"(Beziehung zu {p.name} +2 → {p.relationship})")
-            # Aufgaben-Panel neu bauen
             self.build_task_buttons()
+
         elif ans == "smalltalk":
-            self.log.add("Du: \"Smalltalk.\"")
+            self.log.add('Du: "Smalltalk."')
             if p.rede_lust > 3:
-                self.log.add(f"{p.name}: \"Oh, ich rede so gerne... Übrigens, wusstest du schon, dass ...\"")
+                self.log.add(f'{p.name}: "Oh, ich rede so gerne... Übrigens, wusstest du schon, dass ..."')
             else:
-                self.log.add(f"{p.name}: \"Hm, na gut.\"")
+                self.log.add(f'{p.name}: "Hm, na gut."')
             p.relationship += 1
             self.log.add(f"(Beziehung zu {p.name} +1 → {p.relationship})")
-        elif ans == "nein":
-            self.log.add("Du: \"Nein.\"")
-            self.log.add(f"{p.name}: \"Schade, vielleicht später!\"")
-        else:
-            self.log.add(f"{p.name}: \"Okay.\"")
 
-        # Dialog-Buttons schließen
+        elif ans == "nein":
+            self.log.add('Du: "Nein."')
+            self.log.add(f'{p.name}: "Schade, vielleicht später!"')
+
+        else:
+            self.log.add(f'{p.name}: "Okay."')
+
+        # WICHTIG: NICHT self.dialog_buttons.clear() und NICHT active_* = None
+        # Person bleibt sichtbar, bis "Gespräch beenden" gedrückt wird.
+    def end_conversation(self):
+        if self.active_person:
+            self.log.add(f'{self.active_person.name}: "Bis später!"')
         self.dialog_buttons.clear()
         self.active_person = None
         self.active_portrait = None
 
     def create_task_from_person(self, person: Person):
-        """Erzeugt eine Aufgabe abhängig von der Person und legt sie im passenden Raum ab."""
         if person.name == "Holger":
             neue_aufgabe = Aufgabe(10, "Brief abgeben", "Gehe zur Post und gib den Brief ab.")
             self.raeume["post"].aufgaben.append(neue_aufgabe)
@@ -426,7 +445,6 @@ class GameApp:
             self.log.add(f"{person.name} hat aktuell keine Aufgabe für dich.")
 
     def raum_wechseln(self, neuer_raum: str):
-        """Wechselt den Raum, wenn eine Verbindung existiert (neuer_raum: lowercase Name)."""
         for raum in self.aktueller_raum.verbindungen:
             if raum.name.lower() == neuer_raum:
                 self.aktueller_raum = raum
@@ -435,7 +453,6 @@ class GameApp:
         self.log.add("Du kannst nicht dorthin gehen.")
 
     def aufgabe_ausfuehren(self, aufgabe_id: int):
-        """Führt eine Aufgabe im aktuellen Raum aus und entfernt sie."""
         for aufgabe in list(self.aktueller_raum.aufgaben):
             if aufgabe.id == aufgabe_id:
                 self.log.add(f"Aufgabe '{aufgabe.name}' ausgeführt!")
@@ -444,15 +461,12 @@ class GameApp:
         self.log.add("Ungültige Aufgaben-ID.")
 
     def on_change_room(self, zielraum_name: str):
-        """Raumwechsel via Button."""
         self.raum_wechseln(zielraum_name.lower())
-        self.rebuild_room_ui(full=False)  
+        self.rebuild_room_ui(full=False)
         self.room_bg = self.room_backgrounds[self.aktueller_raum.name]
         self.active_portrait = None
 
     def on_execute_task(self, aufgabe_id: int):
-        """Aufgabe im aktuellen Raum ausführen (wie 'aufgabe_ausfuehren')."""
-        # Prüfen, ob Aufgabe existiert
         found = False
         for a in list(self.aktueller_raum.aufgaben):
             if a.id == aufgabe_id:
@@ -464,55 +478,66 @@ class GameApp:
             self.log.add("Ungültige Aufgaben-ID oder Aufgabe nicht in diesem Raum.")
         self.build_task_buttons()
 
+    # In class GameApp:
+    def get_room_area(self) -> pygame.Rect:
+        return pygame.Rect(20, 20, self.width - 360, self.height - 200)
+
     def draw(self):
         self.screen.fill((15, 15, 20))
 
-        # Hintergrund / Raumfläche links
-        room_area = pygame.Rect(20, 20, self.width - 360, self.height - 200)
+        # Raumfläche + Hintergrund
+        room_area = self.get_room_area()
         pygame.draw.rect(self.screen, BLACK, room_area, 2, border_radius=16)
         self.screen.blit(self.room_bg, room_area)
-
-        # Portrait im Raum-Bereich anzeigen, falls vorhanden
-        if self.active_portrait:
-            portrait_frame = pygame.Rect(room_area.x + 600, room_area.y + 120, 320, 420)
-            img_rect = self.active_portrait.get_rect(center=portrait_frame.center)
-            prev_clip = self.screen.get_clip()
-            self.screen.set_clip(portrait_frame)
-            self.screen.blit(self.active_portrait, img_rect)
-            self.screen.set_clip(prev_clip)
-            if self.active_person:
-                name_ts = FONT_BIG.render(self.active_person.name, True, WHITE)
-                self.screen.blit(name_ts, (portrait_frame.x + 12, portrait_frame.y + 10))
 
         # Panels
         self.panel_people.draw(self.screen)
         self.panel_nav.draw(self.screen)
         self.panel_tasks.draw(self.screen)
 
-        # Buttons
-        for b in self.person_buttons: b.draw(self.screen)
-        for b in self.nav_buttons: b.draw(self.screen)
-        for b in self.task_buttons: b.draw(self.screen)
-        for b in self.dialog_buttons: b.draw(self.screen)
+        # Buttons geclippt in Panels
+        self.draw_buttons_in_panel(self.panel_people, self.person_buttons)
+        self.draw_buttons_in_panel(self.panel_nav, self.nav_buttons)
+        self.draw_buttons_in_panel(self.panel_tasks, self.task_buttons)
+
+        # PORTRAIT: rechts im Raum, unten bündig
+        if self.active_portrait:
+            img = self.active_portrait
+            img_rect = img.get_rect()
+            margin_right = 24
+            margin_bottom = 16
+            img_rect.right = room_area.right - margin_right
+            img_rect.bottom = room_area.bottom - margin_bottom
+
+            prev_clip = self.screen.get_clip()
+            self.screen.set_clip(room_area)               # nur innerhalb des Raums zeichnen
+            self.screen.blit(img, img_rect)
+            self.screen.set_clip(prev_clip)
+
+            if self.active_person:
+                name_ts = FONT_BIG.render(self.active_person.name, True, WHITE)
+                self.screen.blit(name_ts, (img_rect.x + 12, img_rect.y + 8))
+
+        # Dialog-Buttons (liegen nicht in einem Panel)
+        for b in self.dialog_buttons:
+            b.draw(self.screen)
 
         # Log
         self.log.draw(self.screen)
-
         pygame.display.flip()
+
 
     def run(self):
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-                    self.log.handle_event(event)  # <— hinzufügen
-                # Button Events
+                self.log.handle_event(event)  # wichtig: außerhalb des QUIT-Zweigs
                 for b in (self.person_buttons + self.nav_buttons + self.task_buttons + self.dialog_buttons):
                     b.handle_event(event)
 
             self.draw()
             self.clock.tick(60)
-
         pygame.quit()
 
 if __name__ == "__main__":
