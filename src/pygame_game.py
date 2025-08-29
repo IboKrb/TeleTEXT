@@ -1,4 +1,3 @@
-# pygame_game.py
 import os
 import pygame
 from typing import List, Tuple, Optional
@@ -16,196 +15,9 @@ from raum import Raum
 pygame.init()
 pygame.font.init()
 
-FONT = pygame.font.SysFont("arial", 20)
-FONT_SMALL = pygame.font.SysFont("arial", 16)
-FONT_BIG = pygame.font.SysFont("arial", 28)
+from ui import Button, Panel, Slider, TextLog, FONT, FONT_SMALL, FONT_BIG, DARK_BLUE, ACCENT, WHITE, BLACK, GRAY, LIGHT_GRAY, MAGENTA
+from audio import Audio
 
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (50, 50, 50)
-LIGHT_GRAY = (200, 200, 200)
-DARK_BLUE = (25, 35, 60)
-ACCENT = (240, 240, 120)
-MAGENTA = (225, 0, 117)
-
-
-class Button:
-    def __init__(self, rect: pygame.Rect, text: str, callback,
-                 tooltip: Optional[str] = None,
-                 font: Optional[pygame.font.Font] = None):
-        self.rect = rect
-        self.text = text
-        self.callback = callback
-        self.tooltip = tooltip
-        self.hover = False
-        self.font = font or FONT
-
-    def draw(self, surface: pygame.Surface):
-        color = LIGHT_GRAY if self.hover else WHITE
-        pygame.draw.rect(surface, color, self.rect, border_radius=8)
-        pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=8)
-        text_surf = self.font.render(self.text, True, BLACK)
-        surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
-
-    def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.MOUSEMOTION:
-            self.hover = self.rect.collidepoint(event.pos)
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.rect.collidepoint(event.pos) and callable(self.callback):
-                self.callback()
-
-class Slider:
-    def __init__(self, rect: pygame.Rect, min_val=0, max_val=10, value=5, on_change=None):
-        self.rect = rect
-        self.min_val = min_val
-        self.max_val = max_val
-        self.value = int(value)
-        self.on_change = on_change
-        self.dragging = False
-        self.pad = 12  # Innenabstand für die Schiene
-
-    def _val_to_x(self):
-        track_w = self.rect.width - 2 * self.pad
-        ratio = (self.value - self.min_val) / max(1, (self.max_val - self.min_val))
-        return int(self.rect.x + self.pad + ratio * track_w)
-
-    def _x_to_val(self, x):
-        track_w = self.rect.width - 2 * self.pad
-        ratio = (x - (self.rect.x + self.pad)) / max(1, track_w)
-        v = self.min_val + ratio * (self.max_val - self.min_val)
-        v = int(round(max(self.min_val, min(self.max_val, v))))
-        return v
-
-    def set_value(self, v):
-        v = int(max(self.min_val, min(self.max_val, v)))
-        if v != self.value:
-            self.value = v
-            if callable(self.on_change):
-                self.on_change(self.value)
-
-    def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.rect.collidepoint(event.pos):
-                self.dragging = True
-                self.set_value(self._x_to_val(event.pos[0]))
-        elif event.type == pygame.MOUSEMOTION and self.dragging:
-            self.set_value(self._x_to_val(event.pos[0]))
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            self.dragging = False
-
-    def draw(self, surface: pygame.Surface):
-        # Hintergrund
-        pygame.draw.rect(surface, (245, 245, 245), self.rect, border_radius=10)
-        pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=10)
-
-        # Schiene
-        y = self.rect.centery
-        x1 = self.rect.x + self.pad
-        x2 = self.rect.right - self.pad
-        pygame.draw.line(surface, GRAY, (x1, y), (x2, y), 4)
-
-        # Knopf
-        knob_x = self._val_to_x()
-        knob_rect = pygame.Rect(0, 0, 18, 26)
-        knob_rect.center = (knob_x, y)
-        pygame.draw.rect(surface, LIGHT_GRAY, knob_rect, border_radius=6)
-        pygame.draw.rect(surface, BLACK, knob_rect, 2, border_radius=6)
-
-        # Wert (kleine Zahl rechts)
-        val_surf = FONT_SMALL.render(str(self.value), True, BLACK)
-        surface.blit(val_surf, (self.rect.right + 8, self.rect.centery - val_surf.get_height() // 2))
-
-class Panel:
-    def __init__(self, rect: pygame.Rect, title: str = ""):
-        self.rect = rect
-        self.title = title
-
-    def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, (235, 235, 240), self.rect, border_radius=12)
-        pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=12)
-        if self.title:
-            title_surf = FONT_BIG.render(self.title, True, BLACK)
-            surface.blit(title_surf, (self.rect.x + 12, self.rect.y + 8))
-
-    def content_rect(self, pad: int = 12) -> pygame.Rect:
-        title_h = (FONT_BIG.get_height() + 12) if self.title else 0
-        return pygame.Rect(
-            self.rect.x + pad,
-            self.rect.y + pad + title_h,
-            self.rect.width - 2*pad,
-            self.rect.height - 2*pad - title_h
-        )
-
-class TextLog:
-    """Scrollbarer Text-Log mit anpassbarem Rahmen."""
-    def __init__(
-        self,
-        rect: pygame.Rect,
-        max_lines: int = 10,
-        title: str = "Log",
-        bg_color: Tuple[int,int,int] = (245, 245, 250),
-        border_color: Tuple[int,int,int] = (0, 0, 0),
-        border_width: int = 2,
-        radius: int = 12,
-        text_color: Tuple[int,int,int] = (0, 0, 0),
-        pad: int = 10,
-        title_color: Tuple[int,int,int] = (0, 0, 0)
-    ):
-        self.rect = rect
-        self.lines: List[str] = []
-        self.max_lines = max_lines
-        self.scroll_offset = 0
-        self.title = title
-        self.bg_color = bg_color
-        self.border_color = border_color
-        self.border_width = border_width
-        self.radius = radius
-        self.text_color = text_color
-        self.pad = pad
-        self.title_color = title_color
-
-    def add(self, line: str):
-        # Einfache Zeilenumbrüche
-        max_chars = 80
-        while len(line) > max_chars:
-            self.lines.append(line[:max_chars])
-            line = line[max_chars:]
-        self.lines.append(line)
-        if len(self.lines) > 1000:
-            self.lines = self.lines[-1000:]
-
-        # Beim neuen Eintrag automatisch ans Ende scrollen
-        self.scroll_offset = 0
-
-    def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.MOUSEWHEEL:
-            # Nach oben: y > 0 => ältere Zeilen sichtbar machen
-            self.scroll_offset -= event.y
-            self.scroll_offset = max(0, min(self.scroll_offset, max(0, len(self.lines) - self.max_lines)))
-
-    def draw(self, surface: pygame.Surface):
-        # Hintergrund + Rahmen
-        pygame.draw.rect(surface, self.bg_color, self.rect, border_radius=self.radius)
-        pygame.draw.rect(surface, self.border_color, self.rect, self.border_width, border_radius=self.radius)
-
-        x = self.rect.x + self.pad
-        y = self.rect.y + self.pad
-
-        # Optionaler Titel oben links
-        if self.title:
-            title_surf = FONT_SMALL.render(self.title, True, self.title_color)
-            surface.blit(title_surf, (x, y))
-            y += title_surf.get_height() + 6
-
-        # Sichtbaren Bereich bestimmen (mit Scroll)
-        start = max(0, len(self.lines) - self.max_lines - self.scroll_offset)
-        end = start + self.max_lines
-        visible = self.lines[start:end]
-
-        for line in visible:
-            ts = FONT_SMALL.render(line, True, self.text_color)
-            surface.blit(ts, (x, y))
-            y += ts.get_height() + 4
 
 ################################################################################
 # Pygame-Frontend, das die bestehende Spiel-Logik nutzt
@@ -214,16 +26,6 @@ class TextLog:
 # Räume-Hintergründe (z. B. ../assets/Rooms/flur.png)
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "../assets/Rooms")
 
-# Audio
-AUDIO_DIR  = os.path.join(os.path.dirname(__file__), "../assets/Audio")
-MENU_MUSIC = os.path.join(AUDIO_DIR, "menu.mp3")
-GAME_MUSIC = os.path.join(AUDIO_DIR, "game.mp3")
-
-# Mixer sicher starten
-try:
-    pygame.mixer.init()
-except Exception as e:
-    print("[Audio] Mixer konnte nicht initialisiert werden:", e)
 ################################################################################
 # Personen-Portraits laden
 ################################################################################
@@ -401,12 +203,13 @@ class GameApp:
             self.dialog_buttons.append(Button(rect, text, cb, font=FONT_BIG))
             x += btn_w + gap
 
-
     def __init__(self, width=1280, height=720):
-        self.width = width
-        self.height = height
-        Fullscreen= self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        Fullscreen=self.width, self.height = self.screen.get_size()
+        # Vollbild (ermittelt Desktopauflösung)
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        self.width, self.height = self.screen.get_size()
+
+        # Fenster-Modus (statt Fullscreen)
+        self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Team-Adventure (Pygame)")
 
         setup = Setup()
@@ -452,27 +255,30 @@ class GameApp:
         self.menu_rect = None
         self.menu_buttons: List[Button] = []
         self.menu_sliders: List[Slider] = []
-        self.music_volume = 5  # 0..10
-        self.sfx_volume = 5    # 0..10 (Platzhalter)
+        self.music_volume = 5
+        self.sfx_volume = 5
 
-          # --- NEU: Spielzustand & Start-UI ---
-        self.state = "START"              # "START" oder "PLAYING"
+        # Spielzustand & Start-UI
+        self.state = "START"
         self.start_buttons: List[Button] = []
-        self.build_start_ui()             # Buttons für Startbildschirm
-        # nach self.width/self.height gesetzt wurden:
-        happy_row_target_h = max(60, int(self.height * 0.30))  # ~18% der Höhe
+        self.build_start_ui()
+
+        # Happy-Faces Startscreen
+        happy_row_target_h = max(60, int(self.height * 0.30))
         self.start_happy_images = load_happy_images(happy_row_target_h)
 
-        self.play_music(MENU_MUSIC, volume=0.6, fade_ms=600)  # Menü-Musik starten
+        # --- Audio-Manager sauber hier erzeugen ---
+        self.audio = Audio(
+            audio_dir=os.path.join(os.path.dirname(__file__), "../assets/Audio"),
+            menu_track="menu",
+            game_track="game",
+            default_music_volume=self.music_volume,
+            default_sfx_volume=self.sfx_volume,
+            logger=lambda m: self.log.add(m)
+        )
+        # Startscreen → Menümusik
+        self.audio.play_menu_music()
 
-          # Startscreen-Buttons (falls vorhanden) oben drauf zeichnen
-        if hasattr(self, "start_buttons"):
-            for b in self.start_buttons:
-                b.draw(self.screen)
-        try:
-            pygame.mixer.music.set_volume(self.music_volume / 10.0)
-        except Exception:
-            pass
 
     def toggle_menu(self):
         if self.state != "PLAYING":
@@ -484,15 +290,14 @@ class GameApp:
     def close_menu(self):
         self.menu_open = False
 
-    def quit_game(self):
-        self.running = False
-
     def on_music_volume_change(self, v: int):
         self.music_volume = v
-        try:
-            pygame.mixer.music.set_volume(self.music_volume / 10.0)
-        except Exception:
-            pass
+        self.audio.set_music_volume_0_10(v)
+
+    def on_sfx_volume_change(self, v: int):
+        self.sfx_volume = v
+        self.audio.set_sfx_volume_0_10(v)
+
 
     def build_menu_ui(self):
         # Quadratisches Pop-Up mittig
@@ -679,23 +484,12 @@ class GameApp:
 
     def start_game(self):
         self.state = "PLAYING"
-        self.play_music(GAME_MUSIC, volume=0.5, fade_ms=600)
-        # Optional: direkt Dialog-Buttons ausblenden, falls offen
+        self.audio.play_game_music()
         self.dialog_buttons.clear()
 
     def quit_game(self):
+        self.audio.stop_music(fade_ms=400)
         self.running = False
-
-    def play_music(self, path: str, volume: float = 0.6, fade_ms: int = 400):
-        if not os.path.exists(path):
-            self.log.add(f"[Audio] Datei fehlt: {os.path.basename(path)}")
-            return
-        try:
-            pygame.mixer.music.load(path)
-            pygame.mixer.music.set_volume(volume)
-            pygame.mixer.music.play(-1, fade_ms=fade_ms)  # loopend
-        except Exception as e:
-            self.log.add(f"[Audio] Fehler beim Abspielen: {e}")
 
     def on_person_clicked(self, person: Person):
         self.active_person = person
