@@ -1,5 +1,5 @@
-from person import Person
-from raum import Raum
+from models.person import Person
+from models.raum import Raum
 
 class Setup:
     """

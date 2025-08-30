@@ -3,8 +3,15 @@ import os
 import pygame
 from typing import Dict, Optional, Callable
 
+try:
+    from systems.config import AUDIO_DIR as CFG_AUDIO_DIR  # Path oder str
+    AUDIO_DIR = str(CFG_AUDIO_DIR)  # in String wandeln, falls Path
+except Exception:
+    # Fallback: von src/audio.py zwei Ebenen hoch zu <root>/assets/Audio
+    AUDIO_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets", "Audio"))
+
 # Standard-Audioordner relativ zu diesem File:
-AUDIO_DIR = os.path.join(os.path.dirname(__file__), "../assets/Audio")
+AUDIO_DIR = os.path.join(os.path.dirname(__file__), "./assets/Audio")
 
 def _clamp(v: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, int(v)))
@@ -20,8 +27,8 @@ class Audio:
     def __init__(
         self,
         audio_dir: Optional[str] = None,
-        menu_track: str = "menu.mp3",
-        game_track: str = "game.mp3",
+        menu_track: str = "menu",
+        game_track: str = "game",
         default_music_volume: int = 5,  # 0..10
         default_sfx_volume: int = 5,    # 0..10
         logger: Optional[Callable[[str], None]] = None,

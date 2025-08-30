@@ -5,6 +5,15 @@ from typing import Optional, List, Tuple
 # Achtung: stelle sicher, dass pygame.init() + pygame.font.init()
 # im Hauptprogramm *vor* dem Import von ui.py aufgerufen werden.
 
+
+# Sicherstellen, dass das Font-Modul bereit ist
+if not pygame.font.get_init():
+    pygame.font.init()
+
+# (optional, aber ok)
+if not pygame.get_init():
+    pygame.init()
+
 # Standard-Farben
 WHITE      = (255, 255, 255)
 BLACK      = (0, 0, 0)
